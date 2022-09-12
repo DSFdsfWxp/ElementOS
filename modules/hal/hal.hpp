@@ -7,12 +7,16 @@
 #ifndef ELEMENTOS_HAL_MODULE
 #define ELEMENTOS_HAL_MODULE
 
-#include "Arduino.h"
-#include "esp32-hal-cpu.h"
-#include <WiFi.h>
+#include "hal-cpu.hpp"
+#include "hal-serial.hpp"
 
-class HAL_CPU{
+/*
+    #TO DO: Add the hal of the hardwares
+            you need in your project below.
+*/
 
-};
+#include "hal-wifi.hpp"
+#include "hal-led.hpp"
+#include "hal-button.hpp"
 
 #endif
