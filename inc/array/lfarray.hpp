@@ -1,6 +1,11 @@
 #ifndef ElementOS_lfarray
 #define ElementOS_lfarray
 
+
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "freertos/semphr.h"
+
 template <typename Tlfarray_lf>
 struct lfarray_lf{
     Tlfarray_lf value;
@@ -13,9 +18,11 @@ class lfArray{
         lfArray(){
             this->_length = 0;
             this->firstLf = new lfarray_lf<Tlfarray>;
+            this->accessableLock = xSemaphoreCreateMutex();
         }
             
         ~lfArray(){
+            this->tLock_lock();
             lfarray_lf<Tlfarray> *nowLf = (*(this->firstLf)).nextLf;
             lfarray_lf<Tlfarray> *nextLf = 0;
             delete this->firstLf;
@@ -27,6 +34,8 @@ class lfArray{
                 delete nowLf;
                 nowLf = nextLf;
             }
+            this->tLock_unlock();
+            delete this->accessableLock;
         }
         
         Tlfarray pop(){
@@ -158,17 +167,16 @@ class lfArray{
     private:
         long _length;
         lfarray_lf<Tlfarray> *firstLf;
+        SemaphoreHandle_t accessableLock;
         
         void tLock_lock(){
-            /*
-                Put locking operation of thread safe lock here.
-            */
+           while (xSemaphoreTake(this->accessableLock,0) != pdPASS){
+            vTaskDelay(100);
+           }
         }
         
         void tLock_unlock(){
-            /*
-                Put unlocking operation of thread safe lock here.
-            */
+           xSemaphoreGive(this->accessableLock);
         }
         
         lfarray_lf<Tlfarray> *getLf(long pos){

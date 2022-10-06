@@ -21,4 +21,22 @@
 #define ERR_taskMgr_taskCaseListExisted 8
 #define ERR_taskMgr_taskCaseListNotExisted 9
 
+/*
+*   sessionMgr part
+*/
+
+#define ERR_sessionMgr_lockExisted 10
+#define ERR_sessionMgr_lockNotExisted 11
+#define ERR_sessionMgr_lockGroupNotExisted 12
+#define ERR_sessionMgr_lockKeyNotValid 13
+
+/*
+*   applicationMgr part
+*/
+
+#define ERR_applicationMgr_appClassIsAlreadyAdded 14
+#define ERR_applicationMgr_appClassNotInList 15
+#define ERR_applicationMgr_appRemoteCallIsAlreadyAdded 16
+#define ERR_applicationMgr_appRemoteCallNotInList 17
+
 #endif
