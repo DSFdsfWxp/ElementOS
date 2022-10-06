@@ -1,10 +1,12 @@
 #ifndef ElementOS_taskMgr
 #define ElementOS_taskMgr
 
-#include "inc/lfarray.hpp"
+#include "inc/array/lfarray.hpp"
 #include "errList.hpp"
 #include "Arduino.h"
-#include "task.h"
+#include "freertos/FreeRTOS.h"
+/*#include "freertos/portmacro.h"*/
+#include "freertos/task.h"
 
 enum xtaskStatus{
     xtaskRunning,
@@ -27,7 +29,7 @@ class xtaskMgr{
             TaskHandle_t* newTask = new TaskHandle_t;
             BaseType_t result;
             result = xTaskCreate(pvTaskCode,&(this->taskName[pos]),usStackDepth,pvParameters,uxPriority,newTask);
-            if (result==pdPass){
+            if (result==pdPASS){
                 this->taskHandle.push(newTask);
                 this->taskStatus.push(xtaskRunning);
             }else{
@@ -52,7 +54,7 @@ class xtaskMgr{
             TaskHandle_t* newTask = new TaskHandle_t;
             BaseType_t result;
             result = xTaskCreatePinnedToCore(pvTaskCode,&(this->taskName[pos]),usStackDepth,pvParameters,uxPriority,newTask,xCoreID);
-            if (result==pdPass){
+            if (result==pdPASS){
                 this->taskHandle.push(newTask);
                 this->taskStatus.push(xtaskRunning);
             }else{
@@ -77,10 +79,10 @@ class xtaskMgr{
             TaskHandle_t* newTask = new TaskHandle_t;
             BaseType_t result;
             *newTask = xTaskCreateStatic(pvTaskCode,&(this->taskName[pos]),usStackDepth,pvParameters,uxPriority,puxStackBuffer,pxTaskBuffer);
-            if (*puxStackBuffer!=NULL && *pxTaskBuffer!=NULL){
+            if (*newTask!=NULL){
                 this->taskHandle.push(newTask);
                 this->taskStatus.push(xtaskRunning);
-                result = pdPass;
+                result = pdPASS;
             }else{
                 this->taskName.remove(pos);
                 delete newTask;
@@ -104,11 +106,11 @@ class xtaskMgr{
             long pos = this->taskName.push(pcName) - 1;
             TaskHandle_t* newTask = new TaskHandle_t;
             BaseType_t result;
-            *newTask = xTaskCreateStaticPinnedToCore(pvTaskCode,&(this->taskName[pos]),usStackDepth,pvParameters,uxPriority,puxStackBuffer,pxTaskBuffer);
-            if (*puxStackBuffer!=NULL && *pxTaskBuffer!=NULL){
+            *newTask = xTaskCreateStaticPinnedToCore(pvTaskCode,&(this->taskName[pos]),usStackDepth,pvParameters,uxPriority,puxStackBuffer,pxTaskBuffer,xCoreID);
+            if (*newTask!=NULL){
                 this->taskHandle.push(newTask);
                 this->taskStatus.push(xtaskRunning);
-                result = pdPass;
+                result = pdPASS;
             }else{
                 this->taskName.remove(pos);
                 delete newTask;
@@ -318,7 +320,7 @@ class xtaskCaseList{
                 throw ERR_taskMgr_taskCaseNotExisted;
             }
             long pos = this->taskCaseName.indexOf(name);
-            *(this->taskCase[pos]).deleteAllTask();
+            (*(this->taskCase[pos])).deleteAllTask();
             delete this->taskCase[pos];
             this->taskCase.remove(pos);
             this->taskCaseName.remove(pos);
@@ -330,7 +332,7 @@ class xtaskCaseList{
             long length = this->taskCase.length();
             for (long i=0;i<length;i++){
                 xtaskMgr *nowTaskMgr = this->taskCase.pop();
-                *nowTaskMgr.deleteAllTask();
+                (*nowTaskMgr).deleteAllTask();
                 delete nowTaskMgr;
                 this->taskCaseName.pop();
             }
@@ -396,7 +398,7 @@ class taskMgr{
                 throw ERR_taskMgr_taskCaseListNotExisted;
             }
             long pos = this->taskCaseListName.indexOf(name);
-            *(this->taskCaseList[pos]).deleteAllTaskCase();
+            (*(this->taskCaseList[pos])).deleteAllTaskCase();
             delete this->taskCaseList[pos];
             this->taskCaseList.remove(pos);
             this->taskCaseListName.remove(pos);

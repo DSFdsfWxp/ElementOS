@@ -2,10 +2,10 @@
 #define ElementOS_lfarray
 
 template <typename Tlfarray_lf>
-typedef struct lfarray_lf{
+struct lfarray_lf{
     Tlfarray_lf value;
     lfarray_lf<Tlfarray_lf> *nextLf;
-}lfarray_lf;
+};
 
 template <typename Tlfarray>
 class lfArray{

@@ -1,7 +1,7 @@
 #ifndef ElementOS_hardwareMgr
 #define ElementOS_hardwareMgr
 
-#include "inc/lfarray.hpp"
+#include "inc/array/lfarray.hpp"
 #include "errList.hpp"
 
 #if ElementOS_conf_enableDebug

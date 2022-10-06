@@ -44,6 +44,6 @@ class lockMgr{
     
     private:
         
-}
+};
 
 #endif
