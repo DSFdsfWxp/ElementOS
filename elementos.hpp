@@ -6,9 +6,14 @@
 
 class elementos{
     public:
+        elementos(){
+            this->corePointer = new elementosCore;
+            this->apiPointer = new elementosApi(this->corePointer);
+        }
 
     private:
-        
+        elementosCore *corePointer;
+        elementosApi *apiPointer;
 };
 
 #endif
