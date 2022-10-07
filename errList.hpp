@@ -39,4 +39,14 @@
 #define ERR_applicationMgr_appRemoteCallIsAlreadyAdded 16
 #define ERR_applicationMgr_appRemoteCallNotInList 17
 
+/*
+*   api part
+*/
+
+#define ERR_api_invalidLockGroupName 18
+#define ERR_api_invalidLockKey 19
+#define ERR_api_deviceAccesser_lockLose 20
+#define ERR_api_deviceNeedLock 21
+#define ERR_api_applicationIsExisted 22
+
 #endif

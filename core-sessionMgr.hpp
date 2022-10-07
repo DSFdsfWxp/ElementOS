@@ -20,11 +20,11 @@ class foregroundMgr{
             this->tLock_unlock();
         }
         
-        char getForegroundPackageName(){
+        const char getForegroundPackageName(){
             return this->pName;
         }
         
-        char getForegroundApplicationName(){
+        const char getForegroundApplicationName(){
             return this->aName;
         }
     
@@ -43,6 +43,9 @@ class foregroundMgr{
 
 class lockMgr{
     public:
+        lockMgr(){
+            this->isLock = false;
+        }
         void createLock(const char *groupName,const char *lockName){
             this->tLock_lock();
             long pos = this->lockGroupName.indexOf(*groupName);
@@ -109,6 +112,11 @@ class lockMgr{
             if (lockPos==-1){
                 throw ERR_sessionMgr_lockNotExisted;
             }
+            if (this->lockKey[pos][lockPos]!=-1){
+                this->tLock_unlock();
+                return -1;
+            }
+            this->lockKey[pos][lockPos] = random();
             long result = this->lockKey[pos][lockPos];
             this->tLock_unlock();
             return result;
@@ -127,7 +135,7 @@ class lockMgr{
             if (key!=this->lockKey[pos][lockPos]){
                 throw ERR_sessionMgr_lockKeyNotValid;
             }
-            this->lockKey[pos][lockPos] = random();
+            this->lockKey[pos][lockPos] = -1;
             this->tLock_unlock();
         }
 
@@ -135,13 +143,20 @@ class lockMgr{
         lfArray<lfArray<long>> lockKey;
         lfArray<lfArray<char>> lockName;
         lfArray<char> lockGroupName;
+        bool isLock;
 
         void tLock_lock(){
-            vTaskSuspendAll();
+            if (!(this->isLock)){
+                vTaskSuspendAll();
+                this->isLock = true;
+            }
         }
         
         void tLock_unlock(){
-            xTaskResumeAll();
+            if (this->isLock){
+                xTaskResumeAll();
+                this->isLock = false;
+            }
         }
 
 };
