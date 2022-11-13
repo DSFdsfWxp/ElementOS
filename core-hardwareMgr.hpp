@@ -4,84 +4,91 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
-#include "inc/array/lfarray.hpp"
+#include "inc/lfarray.hpp"
+#include "inc/statusLock.hpp"
+#include "conf/elementos-namecase.hpp"
+#include "elementos-std.hpp"
 #include "errList.hpp"
-#include "elementos-conf.hpp"
+#include "conf/elementos-conf.hpp"
 
 #if ElementOS_conf_enableDebug
 #include "Arduino.h"
 #endif
 
+namespace ElementOS{
 class hardwareMgr{
     public:
         template <typename Tdevicehal>
-        void regDevice(Tdevicehal* halPointer,const char *name,bool removeable,bool withLock){
-            this->tLock_lock();
-            if (this->deviceName.includes(*name)){
+        void regDevice(Tdevicehal* halPointer,elestd_name name,bool removeable,bool withLock){
+            this->lock.take();
+            if (this->deviceName.includes(name)){
+                this->lock.give();
                 throw ERR_hardwareMgr_deviceExisted;
             }
             this->devicePointer.push((void*)halPointer);
-            this->deviceName.push(*name);
+            this->deviceName.push(name);
             this->deviceRemoveable.push(removeable);
             this->deviceWithLock.push(withLock);
-            this->tLock_unlock();
+            this->lock.give();
         }
         
         template <typename Tdevicehal>
-        void unregDevice(const char *name){
-            this->tLock_lock();
-            if (!(this->deviceName.includes(*name))){
+        void unregDevice(elestd_name name){
+            this->lock.take();
+            if (!(this->deviceName.includes(name))){
+                this->lock.give();
                 throw ERR_hardwareMgr_deviceNotExisted;
             }
-            if (!(this->deviceRemoveable[this->deviceName.indexOf(*name)])){
+            if (!(this->deviceRemoveable[this->deviceName.indexOf(name)])){
+                this->lock.give();
                 throw ERR_hardwareMgr_deviceCanNotBeRemoved;
             }
-            long pos = this->deviceName.indexOf(*name);
+            long pos = this->deviceName.indexOf(name);
             delete (Tdevicehal*)(this->devicePointer[pos]);
             this->devicePointer.remove(pos);
             this->deviceName.remove(pos);
             this->deviceRemoveable.remove(pos);
-            this->tLock_unlock();
+            this->lock.give();
         }
         
         template <typename Tdevicehal>
-        Tdevicehal* reachDevice(const char *name){
-            if (!(this->deviceName.includes(*name))){
+        Tdevicehal* reachDevice(elestd_name name){
+            this->lock.begin();
+            if (!(this->deviceName.includes(name))){
+                this->lock.end();
                 throw ERR_hardwareMgr_deviceNotExisted;
             }
-            return (Tdevicehal*)(this->devicePointer[this->deviceName.indexOf(*name)]);
+            Tdevicehal *result = (Tdevicehal*)(this->devicePointer[this->deviceName.indexOf(name)]);
+            this->lock.end();
+            return result;
         }
 
-        bool isDeviceWithLock(const char *name){
-            return this->deviceWithLock[this->deviceName.indexOf(*name)];
+        bool isDeviceWithLock(elestd_name name){
+            this->lock.begin();
+            bool result = this->deviceWithLock[this->deviceName.indexOf(name)];
+            this->lock.end();
+            return result;
         }
 
         #if ElementOS_conf_enableDebug
         void listDevice(){
-            this->tLock_lock();
+            this->lock.begin();
             Serial.printf("# The list of registered device(s): \n\n# Name # Removeable # WithLock #\n");
             for(long i=0;i<this->deviceName.length();i++){
-                Serial.printf(" \"%s\" %s %s\n",this->deviceName[i],(this->deviceRemoveable[i] ? "true" : "false"),(this->deviceWithLock[i] ? "true" : "false"));
+                Serial.printf(" \"%d\" %s %s\n",this->deviceName[i],(this->deviceRemoveable[i] ? "true" : "false"),(this->deviceWithLock[i] ? "true" : "false"));
             }
             Serial.printf("\n#End of the list\n\n");
-            this->tLock_unlock();
+            this->lock.end();
         }
         #endif
     private:
         lfArray<void*> devicePointer;
-        lfArray<char> deviceName;
+        lfArray<elestd_name> deviceName;
         lfArray<bool> deviceRemoveable;
         lfArray<bool> deviceWithLock;
-        /*SemaphoreHandle_t accessableLock;*/
-        
-        void tLock_lock(){
-           /*xSemaphoreTake(accessableLock,);*/
-           vTaskSuspendAll();
-        }
-        
-        void tLock_unlock(){
-           xTaskResumeAll();
-        }
+        statusLock lock;
 };
+
+}
 
 #endif

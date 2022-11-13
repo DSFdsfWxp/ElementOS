@@ -29,24 +29,29 @@
 #define ERR_sessionMgr_lockNotExisted 11
 #define ERR_sessionMgr_lockGroupNotExisted 12
 #define ERR_sessionMgr_lockKeyNotValid 13
+#define ERR_sessionMgr_sessionExisted 14
+#define ERR_sessionMgr_sessionNotExisted 15
+#define ERR_sessionMgr_sessionFormCaseExisted 16
+#define ERR_sessionMgr_sessionFormCaseNotExisted 17
+#define ERR_sessionMgr_sessionFormNotEmpty 18
 
 /*
 *   applicationMgr part
 */
 
-#define ERR_applicationMgr_appClassIsAlreadyAdded 14
-#define ERR_applicationMgr_appClassNotInList 15
-#define ERR_applicationMgr_appRemoteCallIsAlreadyAdded 16
-#define ERR_applicationMgr_appRemoteCallNotInList 17
+#define ERR_applicationMgr_appClassIsAlreadyAdded 19
+#define ERR_applicationMgr_appClassNotInList 20
+#define ERR_applicationMgr_appRemoteCallIsAlreadyAdded 21
+#define ERR_applicationMgr_appRemoteCallNotInList 22
 
 /*
 *   api part
 */
 
-#define ERR_api_invalidLockGroupName 18
-#define ERR_api_invalidLockKey 19
-#define ERR_api_deviceAccesser_lockLose 20
-#define ERR_api_deviceNeedLock 21
-#define ERR_api_applicationIsExisted 22
-
+#define ERR_api_invalidLockGroupName 23
+#define ERR_api_invalidLockKey 24
+#define ERR_api_deviceAccesser_invalidOpt 25
+#define ERR_api_deviceNeedLock 26
+#define ERR_api_applicationIsExisted 27
+#define ERR_api_deviceAccesser_notInited 28
 #endif

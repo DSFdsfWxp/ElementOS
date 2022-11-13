@@ -7,4 +7,6 @@
 *   your project.
 */
 
+#include "../hal/hal-led.hpp"
+
 #endif

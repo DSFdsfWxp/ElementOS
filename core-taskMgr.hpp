@@ -1,14 +1,22 @@
 #ifndef ElementOS_taskMgr
 #define ElementOS_taskMgr
 
-#include "inc/array/lfarray.hpp"
+#include "inc/lfarray.hpp"
+#include "inc/statusLock.hpp"
 #include "errList.hpp"
 #include "Arduino.h"
 #include "freertos/FreeRTOS.h"
 /*#include "freertos/portmacro.h"*/
 #include "freertos/task.h"
-#include "USB.h"
-#include "elementos-conf.hpp"
+#include "conf/elementos-conf.hpp"
+#include "conf/elementos-namecase.hpp"
+#include "elementos-std.hpp"
+
+#if ElementOS_conf_fixStackDeepType
+#define configSTACK_DEPTH_TYPE const uint32_t
+#endif
+
+namespace ElementOS{
 
 enum xtaskStatus{
     xtaskRunning,
@@ -18,47 +26,71 @@ enum xtaskStatus{
 
 class xtaskMgr{
     public:
-        xtaskMgr(int *tLock_Num){
-            this->tLock_Num = tLock_Num;
-        }
         BaseType_t createTask(TaskFunction_t pvTaskCode,
-                              const char *pcName,
+                              elestd_name pcName,
                               configSTACK_DEPTH_TYPE usStackDepth,
                               void *pvParameters,
                               UBaseType_t uxPriority){
-            this->tLock_lock();
-            if (this->taskName.includes(*pcName)){
+            Serial.printf("hello world from xtaskMgr::createTask(%p,%d,%d,%p,%p)\n",pvTaskCode,(int)pcName,usStackDepth,pvParameters,uxPriority);
+            this->lock.take();
+            if (this->taskName.includes(pcName)){
+                this->lock.give();
                 throw ERR_taskMgr_taskExisted;
             }
-            long pos = this->taskName.push(*pcName) - 1;
+            long pos = this->taskName.push(pcName) - 1;
             TaskHandle_t* newTask = new TaskHandle_t;
             BaseType_t result;
-            result = xTaskCreate(pvTaskCode,&(this->taskName[pos]),usStackDepth,pvParameters,uxPriority,newTask);
+            result = xTaskCreate(pvTaskCode,"t",usStackDepth,pvParameters,uxPriority,newTask);
             if (result==pdPASS){
+                Serial.printf("ok.\n");
                 this->taskHandle.push(newTask);
                 this->taskStatus.push(xtaskRunning);
             }else{
                 this->taskName.remove(pos);
                 delete newTask;
             }
-            this->tLock_unlock();
+            this->lock.give();
+            Serial.printf("goodbye world from xtaskMgr::createTask(%p,%d,%d,%p,%p)\n",pvTaskCode,(int)pcName,usStackDepth,pvParameters,uxPriority);
             return result;
+        }
+
+        TaskHandle_t* createTaskWithoutName(TaskFunction_t pvTaskCode,
+                              configSTACK_DEPTH_TYPE usStackDepth,
+                              void *pvParameters,
+                              UBaseType_t uxPriority){
+            this->lock.take();
+            long pos = this->taskName.push(ElementOS::n_noneNameTask) - 1;
+            TaskHandle_t* newTask = new TaskHandle_t;
+            BaseType_t result;
+            result = xTaskCreate(pvTaskCode,"t",usStackDepth,pvParameters,uxPriority,newTask);
+            if (result==pdPASS){
+                this->taskHandle.push(newTask);
+                this->taskStatus.push(xtaskRunning);
+            }else{
+                this->taskName.remove(pos);
+                delete newTask;
+                this->lock.give();
+                throw result;
+            }
+            this->lock.give();
+            return newTask;
         }
         
         BaseType_t createTaskPinnedToCore(TaskFunction_t pvTaskCode,
-                              const char *pcName,
+                              elestd_name pcName,
                               configSTACK_DEPTH_TYPE usStackDepth,
                               void *pvParameters,
                               UBaseType_t uxPriority,
                               const BaseType_t xCoreID){
-            this->tLock_lock();
-            if (this->taskName.includes(*pcName)){
+            this->lock.take();
+            if (this->taskName.includes(pcName)){
+                this->lock.give();
                 throw ERR_taskMgr_taskExisted;
             }
-            long pos = this->taskName.push(*pcName) - 1;
+            long pos = this->taskName.push(pcName) - 1;
             TaskHandle_t* newTask = new TaskHandle_t;
             BaseType_t result;
-            result = xTaskCreatePinnedToCore(pvTaskCode,&(this->taskName[pos]),usStackDepth,pvParameters,uxPriority,newTask,xCoreID);
+            result = xTaskCreatePinnedToCore(pvTaskCode,"t",usStackDepth,pvParameters,uxPriority,newTask,xCoreID);
             if (result==pdPASS){
                 this->taskHandle.push(newTask);
                 this->taskStatus.push(xtaskRunning);
@@ -66,24 +98,25 @@ class xtaskMgr{
                 this->taskName.remove(pos);
                 delete newTask;
             }
-            this->tLock_unlock();
+            this->lock.give();
             return result;
         }
         
         BaseType_t createTaskStatic(TaskFunction_t pvTaskCode,
-                              const char *pcName,
+                              elestd_name pcName,
                               configSTACK_DEPTH_TYPE usStackDepth,
                               void *pvParameters,
                               UBaseType_t uxPriority,StackType_t *const puxStackBuffer,
                               StaticTask_t *const pxTaskBuffer){
-            this->tLock_lock();
-            if (this->taskName.includes(*pcName)){
+            this->lock.take();
+            if (this->taskName.includes(pcName)){
+                this->lock.give();
                 throw ERR_taskMgr_taskExisted;
             }
-            long pos = this->taskName.push(*pcName) - 1;
+            long pos = this->taskName.push(pcName) - 1;
             TaskHandle_t* newTask = new TaskHandle_t;
             BaseType_t result;
-            *newTask = xTaskCreateStatic(pvTaskCode,&(this->taskName[pos]),usStackDepth,pvParameters,uxPriority,puxStackBuffer,pxTaskBuffer);
+            *newTask = xTaskCreateStatic(pvTaskCode,"t",usStackDepth,pvParameters,uxPriority,puxStackBuffer,pxTaskBuffer);
             if (*newTask!=NULL){
                 this->taskHandle.push(newTask);
                 this->taskStatus.push(xtaskRunning);
@@ -93,25 +126,26 @@ class xtaskMgr{
                 delete newTask;
                 result = errCOULD_NOT_ALLOCATE_REQUIRED_MEMORY;
             }
-            this->tLock_unlock();
+            this->lock.give();
             return result;
         }
         
         BaseType_t createTaskStaticPinnedToCore(TaskFunction_t pvTaskCode,
-                              const char *pcName,
+                              elestd_name pcName,
                               configSTACK_DEPTH_TYPE usStackDepth,
                               void *pvParameters,
                               UBaseType_t uxPriority,StackType_t *const puxStackBuffer,
                               StaticTask_t *const pxTaskBuffer,
                               const BaseType_t xCoreID){
-            this->tLock_lock();
-            if (this->taskName.includes(*pcName)){
+            this->lock.take();
+            if (this->taskName.includes(pcName)){
+                this->lock.give();
                 throw ERR_taskMgr_taskExisted;
             }
-            long pos = this->taskName.push(*pcName) - 1;
+            long pos = this->taskName.push(pcName) - 1;
             TaskHandle_t* newTask = new TaskHandle_t;
             BaseType_t result;
-            *newTask = xTaskCreateStaticPinnedToCore(pvTaskCode,&(this->taskName[pos]),usStackDepth,pvParameters,uxPriority,puxStackBuffer,pxTaskBuffer,xCoreID);
+            *newTask = xTaskCreateStaticPinnedToCore(pvTaskCode,"t",usStackDepth,pvParameters,uxPriority,puxStackBuffer,pxTaskBuffer,xCoreID);
             if (*newTask!=NULL){
                 this->taskHandle.push(newTask);
                 this->taskStatus.push(xtaskRunning);
@@ -121,74 +155,129 @@ class xtaskMgr{
                 delete newTask;
                 result = errCOULD_NOT_ALLOCATE_REQUIRED_MEMORY;
             }
-            this->tLock_unlock();
+            this->lock.give();
             return result;
         }
         
         #if ElementOS_conf_enableTaskTracking || ElementOS_conf_enableDebug
         
-        const char getTaskName(long pos){
-            return this->taskName[pos];
+        elestd_name getTaskName(long pos){
+            this->lock.begin();
+            elestd_name result = this->taskName[pos];
+            this->lock.end();
+            return result;
         }
         
         #endif
         
-        void deleteTask(const char *pcName){
-            this->tLock_lock();
-            if (!(this->taskName.includes(*pcName))){
+        void deleteTask(elestd_name pcName){
+            this->lock.take();
+            if (!(this->taskName.includes(pcName))){
+                this->lock.give();
                 throw ERR_taskMgr_taskNotExisted;
             }
-            long pos = this->taskName.indexOf(*pcName);
+            long pos = this->taskName.indexOf(pcName);
             vTaskDelete(*(this->taskHandle[pos]));
             this->taskHandle.remove(pos);
             this->taskName.remove(pos);
             this->taskStatus.remove(pos);
-            this->tLock_unlock();
+            this->lock.give();
         }
-        
-        void suspendTask(const char *pcName){
-            this->tLock_lock();
-            if (!(this->taskName.includes(*pcName))){
+
+        void deleteTask(TaskHandle_t *taskHandleP){
+            this->lock.take();
+            if (!(this->taskHandle.includes(taskHandleP))){
+                this->lock.give();
                 throw ERR_taskMgr_taskNotExisted;
             }
-            long pos = this->taskName.indexOf(*pcName);
+            long pos = this->taskHandle.indexOf(taskHandleP);
+            vTaskDelete(*(this->taskHandle[pos]));
+            this->taskHandle.remove(pos);
+            this->taskName.remove(pos);
+            this->taskStatus.remove(pos);
+            this->lock.give();
+        }
+        
+        void suspendTask(elestd_name pcName){
+            this->lock.take();
+            if (!(this->taskName.includes(pcName))){
+                this->lock.give();
+                throw ERR_taskMgr_taskNotExisted;
+            }
+            long pos = this->taskName.indexOf(pcName);
             if (this->taskStatus[pos]==xtaskRunning){
                 vTaskSuspend(*(this->taskHandle[pos]));
             }
             this->taskStatus[pos] = xtaskSuspended;
-            this->tLock_unlock();
+            this->lock.give();
         }
-        
-        void resumeTask(const char *pcName){
-            this->tLock_lock();
-            if (!(this->taskName.includes(*pcName))){
+
+        void suspendTask(TaskHandle_t *taskHandleP){
+            this->lock.take();
+            if (!(this->taskHandle.includes(taskHandleP))){
+                this->lock.give();
                 throw ERR_taskMgr_taskNotExisted;
             }
-            long pos = this->taskName.indexOf(*pcName);
+            long pos = this->taskHandle.indexOf(taskHandleP);
+            if (this->taskStatus[pos]==xtaskRunning){
+                vTaskSuspend(*(this->taskHandle[pos]));
+            }
+            this->taskStatus[pos] = xtaskSuspended;
+            this->lock.give();
+        }
+        
+        void resumeTask(elestd_name pcName){
+            this->lock.take();
+            if (!(this->taskName.includes(pcName))){
+                this->lock.give();
+                throw ERR_taskMgr_taskNotExisted;
+            }
+            long pos = this->taskName.indexOf(pcName);
             if (this->taskStatus[pos]==xtaskSuspended || this->taskStatus[pos]==xtaskSuspendedBySuspendAll){
                 vTaskResume(*(this->taskHandle[pos]));
             }
             this->taskStatus[pos] = xtaskRunning;
-            this->tLock_unlock();
+            this->lock.give();
         }
-        
-        xtaskStatus getTaskStatus(const char *pcName){
-            if (!(this->taskName.includes(*pcName))){
+
+        void resumeTask(TaskHandle_t *taskHandleP){
+            this->lock.take();
+            if (!(this->taskHandle.includes(taskHandleP))){
+                this->lock.give();
                 throw ERR_taskMgr_taskNotExisted;
             }
-            return this->taskStatus[this->taskName.indexOf(*pcName)];
+            long pos = this->taskHandle.indexOf(taskHandleP);
+            if (this->taskStatus[pos]==xtaskSuspended || this->taskStatus[pos]==xtaskSuspendedBySuspendAll){
+                vTaskResume(*(this->taskHandle[pos]));
+            }
+            this->taskStatus[pos] = xtaskRunning;
+            this->lock.give();
+        }
+        
+        xtaskStatus getTaskStatus(elestd_name pcName){
+            this->lock.begin();
+            if (!(this->taskName.includes(pcName))){
+                this->lock.end();
+                throw ERR_taskMgr_taskNotExisted;
+            }
+            xtaskStatus result = this->taskStatus[this->taskName.indexOf(pcName)];
+            this->lock.end();
+            return result;
         }
         
         #if ElementOS_conf_enableTaskTracking || ElementOS_conf_enableDebug
         
         xtaskStatus getTaskStatus(long pos){
-            return this->taskStatus[pos];
+            this->lock.begin();
+            xtaskStatus result = this->taskStatus[pos];
+            this->lock.end();
+            return result;
         }
         
         #endif
         
         void deleteAllTask(){
-            this->tLock_lock();
+            this->lock.take();
             long length = this->taskHandle.length();
             for (long i=0;i<length;i++){
                 TaskHandle_t *nowHandle = this->taskHandle.pop();
@@ -197,15 +286,15 @@ class xtaskMgr{
                 this->taskName.pop();
                 this->taskStatus.pop();
             }
-            this->tLock_unlock();
+            this->lock.give();
         }
         
-        void deleteAllTask(const char *pcName){
-            this->tLock_lock();
+        void deleteAllTask(elestd_name pcName){
+            this->lock.take();
             long length = this->taskHandle.length();
             for (long i=0;i<length;i++){
-                if ((this->taskName.pop())==*pcName){
-                    this->taskName.push(*pcName);
+                if ((this->taskName.pop())==pcName){
+                    this->taskName.push(pcName);
                     continue;
                 }
                 TaskHandle_t *nowHandle = this->taskHandle.pop();
@@ -213,11 +302,11 @@ class xtaskMgr{
                 delete nowHandle;
                 this->taskStatus.pop();
             }
-            this->tLock_unlock();
+            this->lock.give();
         }
         
         void suspendAllTask(){
-            this->tLock_lock();
+            this->lock.take();
             long length = this->taskHandle.length();
             for (long i=0;i<length;i++){
                 if (this->taskStatus[i]==xtaskRunning){
@@ -225,14 +314,14 @@ class xtaskMgr{
                     this->taskStatus[i] = xtaskSuspendedBySuspendAll;
                 }
             }
-            this->tLock_unlock();
+            this->lock.give();
         }
         
-        void suspendAllTask(const char *pcName){
-            this->tLock_lock();
+        void suspendAllTask(elestd_name pcName){
+            this->lock.take();
             long length = this->taskHandle.length();
             for (long i=0;i<length;i++){
-                if (this->taskName[i]==*pcName){
+                if (this->taskName[i]==pcName){
                     continue;
                 }
                 if (this->taskStatus[i]==xtaskRunning){
@@ -240,22 +329,22 @@ class xtaskMgr{
                     this->taskStatus[i] = xtaskSuspendedBySuspendAll;
                 }
             }
-            this->tLock_unlock();
+            this->lock.give();
         }
         
         void refreshTask(){
-            this->tLock_lock();
+            this->lock.take();
             long length = this->taskHandle.length();
             for (long i=0;i<length;i++){
                 if (this->taskStatus[i]==xtaskSuspendedBySuspendAll){
                     this->taskStatus[i] = xtaskSuspended;
                 }
             }
-            this->tLock_unlock();
+            this->lock.give();
         }
         
         void unsuspendAllTask(){
-            this->tLock_lock();
+            this->lock.take();
             long length = this->taskHandle.length();
             for (long i=0;i<length;i++){
                 if (this->taskStatus[i]==xtaskSuspendedBySuspendAll){
@@ -263,11 +352,11 @@ class xtaskMgr{
                     this->taskStatus[i] = xtaskRunning;
                 }
             }
-            this->tLock_unlock();
+            this->lock.give();
         }
         
         void resumeAllTask(){
-            this->tLock_lock();
+            this->lock.take();
             long length = this->taskHandle.length();
             for (long i=0;i<length;i++){
                 if (this->taskStatus[i]==xtaskSuspended || this->taskStatus[i]==xtaskSuspendedBySuspendAll){
@@ -275,70 +364,57 @@ class xtaskMgr{
                     this->taskStatus[i] = xtaskRunning;
                 }
             }
-            this->tLock_unlock();
+            this->lock.give();
         }
         
         #if ElementOS_conf_enableTaskTracking || ElementOS_conf_enableDebug
         
         long length(){
-            return this->taskName.length();
+            this->lock.begin();
+            long result = this->taskName.length();
+            this->lock.end();
+            return result;
         }
         
         #endif
         
     private:
         lfArray<TaskHandle_t*> taskHandle;
-        lfArray<char> taskName;
+        lfArray<elestd_name> taskName;
         lfArray<xtaskStatus> taskStatus;
-        int *tLock_Num;
-        
-        void tLock_lock(){
-            if (*(this->tLock_Num) == 0){
-                vTaskSuspendAll();
-            }
-            (*(this->tLock_Num))++;
-        }
-        
-        void tLock_unlock(){
-            if(*(this->tLock_Num) == 1){
-                xTaskResumeAll();
-            }
-            *(this->tLock_Num) = 0;
-        }
-        
+        statusLock lock;
 };
 
 class xtaskCaseList{
     public:
-        xtaskCaseList(int* tLock_Num){
-            this->tLock_Num = tLock_Num;
-        }
-        void createTaskCase(const char *name){
-            this->tLock_lock();
-            if (this->taskCaseName.includes(*name)){
+        void createTaskCase(elestd_name name){
+            this->lock.take();
+            if (this->taskCaseName.includes(name)){
+                this->lock.give();
                 throw ERR_taskMgr_taskCaseExisted;
             }
-            xtaskMgr *newTaskMgr = new xtaskMgr(this->tLock_Num);
+            xtaskMgr *newTaskMgr = new xtaskMgr;
             this->taskCase.push(newTaskMgr);
-            this->taskCaseName.push(*name);
-            this->tLock_unlock();
+            this->taskCaseName.push(name);
+            this->lock.give();
         }
         
-        void deleteTaskCase(const char *name){
-            this->tLock_lock();
-            if (!(this->taskCaseName.includes(*name))){
+        void deleteTaskCase(elestd_name name){
+            this->lock.take();
+            if (!(this->taskCaseName.includes(name))){
+                this->lock.give();
                 throw ERR_taskMgr_taskCaseNotExisted;
             }
-            long pos = this->taskCaseName.indexOf(*name);
+            long pos = this->taskCaseName.indexOf(name);
             (*(this->taskCase[pos])).deleteAllTask();
             delete this->taskCase[pos];
             this->taskCase.remove(pos);
             this->taskCaseName.remove(pos);
-            this->tLock_unlock();
+            this->lock.give();
         }
         
         void deleteAllTaskCase(){
-            this->tLock_lock();
+            this->lock.take();
             long length = this->taskCase.length();
             for (long i=0;i<length;i++){
                 xtaskMgr *nowTaskMgr = this->taskCase.pop();
@@ -346,126 +422,115 @@ class xtaskCaseList{
                 delete nowTaskMgr;
                 this->taskCaseName.pop();
             }
-            this->tLock_unlock();
+            this->lock.give();
         }
         
-        xtaskMgr* reachTaskCase(const char *name){
-            if (!(this->taskCaseName.includes(*name))){
+        xtaskMgr* reachTaskCase(elestd_name name){
+            this->lock.begin();
+            if (!(this->taskCaseName.includes(name))){
+                this->lock.end();
                 throw ERR_taskMgr_taskCaseNotExisted;
             }
-            return this->taskCase[this->taskCaseName.indexOf(*name)];
+            xtaskMgr* result = this->taskCase[this->taskCaseName.indexOf(name)];
+            this->lock.end();
+            return result;
         }
         
         #if ElementOS_conf_enableTaskTracking || ElementOS_conf_enableDebug
         
         xtaskMgr* reachTaskCase(long pos){
-            return this->taskCase[pos];
+            this->lock.begin();
+            xtaskMgr* result = this->taskCase[pos];
+            this->lock.end();
+            return result;
         }
         
-        char getTaskCaseName(long pos){
-            return this->taskCaseName[pos];
+        elestd_name getTaskCaseName(long pos){
+            this->lock.begin();
+            elestd_name result = this->taskCaseName[pos];
+            this->lock.end();
+            return result;
         }
         
         long length(){
-            return this->taskCaseName.length();
+            this->lock.begin();
+            long result = this->taskCaseName.length();
+            this->lock.end();
+            return result;
         }
         
         #endif
         
     private:
         lfArray<xtaskMgr*> taskCase;
-        lfArray<char> taskCaseName;
-        int *tLock_Num;
-        
-        void tLock_lock(){
-            if (*(this->tLock_Num) == 0){
-                vTaskSuspendAll();
-            }
-            (*(this->tLock_Num))++;
-        }
-        
-        void tLock_unlock(){
-            if(*(this->tLock_Num) == 1){
-                xTaskResumeAll();
-            }
-            *(this->tLock_Num) = 0;
-        }
+        lfArray<elestd_name> taskCaseName;
+        statusLock lock;
 };
 
 class taskMgr{
     public:
-        taskMgr(){
-            this->tLock_Num = new int;
-            *(this->tLock_Num) = 0;
-        }
-        void createTaskCaseList(const char *name){
-            this->tLock_lock();
-            if (this->taskCaseListName.includes(*name)){
+        void createTaskCaseList(elestd_name name){
+            this->lock.take();
+            if (this->taskCaseListName.includes(name)){
+                this->lock.give();
                 throw ERR_taskMgr_taskCaseListExisted;
             }
-            xtaskCaseList *newTaskList = new xtaskCaseList(this->tLock_Num);
+            xtaskCaseList *newTaskList = new xtaskCaseList;
             this->taskCaseList.push(newTaskList);
-            this->taskCaseListName.push(*name);
-            this->tLock_unlock();
+            this->taskCaseListName.push(name);
+            this->lock.give();
         }
         
-        void deleteTaskCaseList(const char *name){
-            this->tLock_lock();
-            if (!(this->taskCaseListName.includes(*name))){
+        void deleteTaskCaseList(elestd_name name){
+            this->lock.take();
+            if (!(this->taskCaseListName.includes(name))){
+                this->lock.give();
                 throw ERR_taskMgr_taskCaseListNotExisted;
             }
-            long pos = this->taskCaseListName.indexOf(*name);
+            long pos = this->taskCaseListName.indexOf(name);
             (*(this->taskCaseList[pos])).deleteAllTaskCase();
             delete this->taskCaseList[pos];
             this->taskCaseList.remove(pos);
             this->taskCaseListName.remove(pos);
-            this->tLock_unlock();
+            this->lock.give();
         }
         
-        xtaskCaseList* reachTaskCaseList(const char *name){
-            if (!(this->taskCaseListName.includes(*name))){
+        xtaskCaseList* reachTaskCaseList(elestd_name name){
+            this->lock.begin();
+            if (!(this->taskCaseListName.includes(name))){
+                this->lock.end();
                 throw ERR_taskMgr_taskCaseListNotExisted;
             }
-            return this->taskCaseList[this->taskCaseListName.indexOf(*name)];
+            xtaskCaseList* result = this->taskCaseList[this->taskCaseListName.indexOf(name)];
+            this->lock.end();
+            return result;
         }
         
         #if ElementOS_conf_enableDebug
         void listTask(){
-            this->tLock_lock();
+            this->lock.begin();
             Serial.printf("# The list of all task: \n\n# Name # Status #\n");
             for (long i=0;i<this->taskCaseListName.length();i++){
                 xtaskCaseList *nowTaskList = this->taskCaseList[i];
-                Serial.printf(" \"%s\" -",this->taskCaseListName[i]);
+                Serial.printf(" \"%d\" -",this->taskCaseListName[i]);
                 for (long ii=0;ii<(*nowTaskList).length();ii++){
                     xtaskMgr *nowTaskMgr = (*nowTaskList).reachTaskCase(ii);
-                    Serial.printf(" \"%s.%s\" -",this->taskCaseListName[i],(*nowTaskList).getTaskCaseName(ii));
+                    Serial.printf(" \"%d.%d\" -",this->taskCaseListName[i],(*nowTaskList).getTaskCaseName(ii));
                     for (long iii=0;iii<(*nowTaskMgr).length();iii++){
-                        Serial.printf(" \"%s.%s.%s\" %s",this->taskCaseListName[i],(*nowTaskList).getTaskCaseName(ii),((*nowTaskMgr).getTaskName(iii)),(((*nowTaskMgr).getTaskStatus(iii) == xtaskRunning) ? "Running" : "Suspended"));
+                        Serial.printf(" \"%d.%d.%d\" %s",this->taskCaseListName[i],(*nowTaskList).getTaskCaseName(ii),((*nowTaskMgr).getTaskName(iii)),(((*nowTaskMgr).getTaskStatus(iii) == xtaskRunning) ? "Running" : "Suspended"));
                     }
                 }
             }
-            this->tLock_unlock();
+            this->lock.end();
         }
         #endif
         
     private:
         lfArray<xtaskCaseList*> taskCaseList;
-        lfArray<char> taskCaseListName;
-        int *tLock_Num;
-        
-        void tLock_lock(){
-           if (*(this->tLock_Num) == 0){
-                vTaskSuspendAll();
-            }
-            (*(this->tLock_Num))++;
-        }
-        
-        void tLock_unlock(){
-            if(*(this->tLock_Num) == 1){
-                xTaskResumeAll();
-            }
-            *(this->tLock_Num) = 0;
-        }
+        lfArray<elestd_name> taskCaseListName;
+        statusLock lock;
 };
+
+}
 
 #endif
